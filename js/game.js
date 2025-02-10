@@ -33,13 +33,12 @@ async function getMaxPage() {
 }
 
 async function getPageCards(pageNum) {
-  const cards = await room.collection('cards')
+  return await room.collection('cards')
     .filter({ page: pageNum })
     .getList();
-  return cards;
 }
 
-async function createCard(index, existingCards) {
+async function createCard(index, pageCards) {
   const cardElement = document.createElement('div');
   cardElement.className = 'bubble';
   cardElement.innerHTML = `
@@ -49,13 +48,13 @@ async function createCard(index, existingCards) {
     </div>
   `;
   
-  const existingCard = existingCards.find(card => card.position === index);
+  // Find if this card exists in the pageCards array
+  const existingCard = pageCards.find(card => card.position === index);
 
   if (existingCard) {
     const cardDiv = cardElement.querySelector('.card');
     cardDiv.classList.add('flipped');
-    const cardBack = cardDiv.querySelector('.card-back');
-    cardBack.textContent = existingCard.emoji;
+    cardDiv.querySelector('.card-back').textContent = existingCard.emoji;
     
     cardElement.addEventListener('click', () => {
       document.querySelector('.details-image').textContent = existingCard.emoji;
@@ -63,8 +62,7 @@ async function createCard(index, existingCards) {
     });
   } else {
     cardElement.addEventListener('click', async function() {
-      const cardDiv = cardElement.querySelector('.card');
-      if (!cardDiv.classList.contains('flipped')) {
+      if (!cardElement.querySelector('.card').classList.contains('flipped')) {
         const { emoji, description } = await generateEmoji();
         
         await room.collection('cards').create({
@@ -74,9 +72,8 @@ async function createCard(index, existingCards) {
           description: description
         });
 
-        cardDiv.classList.add('flipped');
-        const cardBack = cardDiv.querySelector('.card-back');
-        cardBack.textContent = emoji;
+        cardElement.querySelector('.card').classList.add('flipped');
+        cardElement.querySelector('.card-back').textContent = emoji;
         
         document.querySelector('.details-image').textContent = emoji;
         document.querySelector('.details-description').textContent = description;
@@ -91,19 +88,21 @@ async function renderGrid() {
   const container = document.querySelector('.bubble-container');
   container.innerHTML = '';
   
-  // First get all cards for the current page
+  // Fetch all cards for the current page
   const pageCards = await getPageCards(currentPage);
   
-  // Create and append all cards for the current page
+  // Create and append cards
   for (let i = 0; i < CARDS_PER_PAGE; i++) {
     const card = await createCard(i, pageCards);
     container.appendChild(card);
   }
   
-  // Update navigation buttons
+  // Update page controls
   const maxPage = await getMaxPage();
   document.querySelector('.scroll-up').disabled = currentPage === 1;
   
+  // For the down button, we only disable if current page is fully flipped
+  // and it's the last page
   const allCardsFlipped = pageCards.length === CARDS_PER_PAGE;
   document.querySelector('.scroll-down').disabled = allCardsFlipped && currentPage === maxPage;
 }
@@ -120,24 +119,15 @@ async function setupPagination() {
   });
 
   downButton.addEventListener('click', async () => {
-    const maxPage = await getMaxPage();
-    const currentPageCards = await getPageCards(currentPage);
-    
-    if (currentPageCards.length === CARDS_PER_PAGE && currentPage === maxPage) {
-      // Only create new page if current page is full
-      currentPage = maxPage + 1;
-    } else {
-      currentPage++;
-    }
+    currentPage++;
     await renderGrid();
   });
 }
 
-// Subscribe to real-time card updates
+// Subscribe to changes in the cards collection
 room.collection('cards').subscribe(async (cards) => {
-  const currentPageCards = cards.filter(card => card.page === currentPage);
-  
-  currentPageCards.forEach(card => {
+  const pageCards = await getPageCards(currentPage);
+  pageCards.forEach(card => {
     const cardElement = document.querySelector(`.bubble:nth-child(${card.position + 1})`);
     if (cardElement) {
       const cardDiv = cardElement.querySelector('.card');
