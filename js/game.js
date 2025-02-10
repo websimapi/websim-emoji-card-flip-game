@@ -29,12 +29,10 @@ async function generateEmoji() {
 async function getMaxPage() {
   const cards = await room.collection('cards').getList();
   if (cards.length === 0) return 1;
-  
-  // Get the highest page number that has at least one card
   return Math.max(...cards.map(card => card.page), 1);
 }
 
-async function hasCardsOnPage(pageNum) {
+async function doesPageExist(pageNum) {
   const cards = await room.collection('cards')
     .filter({ page: pageNum })
     .getList();
@@ -51,17 +49,18 @@ async function createCard(index) {
     </div>
   `;
   
-  const existingCard = await room.collection('cards')
+  const existingCards = await room.collection('cards')
     .filter({ position: index, page: currentPage })
     .getList();
 
-  if (existingCard.length > 0) {
+  if (existingCards.length > 0) {
+    const existingCard = existingCards[0];
     cardElement.querySelector('.card').classList.add('flipped');
-    cardElement.querySelector('.card-back').textContent = existingCard[0].emoji;
+    cardElement.querySelector('.card-back').textContent = existingCard.emoji;
     
     cardElement.addEventListener('click', () => {
-      document.querySelector('.details-image').textContent = existingCard[0].emoji;
-      document.querySelector('.details-description').textContent = existingCard[0].description;
+      document.querySelector('.details-image').textContent = existingCard.emoji;
+      document.querySelector('.details-description').textContent = existingCard.description;
     });
   } else {
     cardElement.addEventListener('click', async function() {
@@ -100,14 +99,14 @@ async function renderGrid() {
   const maxPage = await getMaxPage();
   document.querySelector('.scroll-up').disabled = currentPage === 1;
   
-  // Only disable down button if we're on the max page AND all cards are flipped
+  // For the down button, we always allow moving forward unless we're on a page
+  // that has all cards flipped
   const currentPageCards = await room.collection('cards')
     .filter({ page: currentPage })
     .getList();
   const allCardsFlipped = currentPageCards.length === CARDS_PER_PAGE;
   
-  document.querySelector('.scroll-down').disabled = 
-    currentPage === maxPage && allCardsFlipped;
+  document.querySelector('.scroll-down').disabled = allCardsFlipped && currentPage === maxPage;
 }
 
 async function setupPagination() {
@@ -122,19 +121,23 @@ async function setupPagination() {
   });
 
   downButton.addEventListener('click', async () => {
+    // Get the highest page that exists
     const maxPage = await getMaxPage();
-    const hasCurrentPageCards = await hasCardsOnPage(currentPage);
     
-    // Allow going to next page if either:
-    // 1. There are already cards on the next page
-    // 2. The current page has at least one flipped card
-    if (currentPage < maxPage || hasCurrentPageCards) {
-      currentPage++;
-      await renderGrid();
-    }
+    // Always allow moving to the next page
+    currentPage++;
+    
+    // If this page doesn't exist yet, it will show up as empty cards
+    // ready to be flipped
+    await renderGrid();
+    
+    // Update navigation state
+    upButton.disabled = currentPage === 1;
+    // Down button is handled in renderGrid()
   });
 }
 
+// Subscribe to changes in the cards collection
 room.collection('cards').subscribe((cards) => {
   cards.forEach(card => {
     if (card.page === currentPage) {
@@ -150,5 +153,6 @@ room.collection('cards').subscribe((cards) => {
   });
 });
 
+// Initialize the game
 setupPagination();
 renderGrid();
