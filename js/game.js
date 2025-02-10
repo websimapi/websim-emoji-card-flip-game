@@ -33,12 +33,13 @@ async function getMaxPage() {
 }
 
 async function getPageCards(pageNum) {
-  return await room.collection('cards')
+  const cards = await room.collection('cards')
     .filter({ page: pageNum })
     .getList();
+  return cards;
 }
 
-async function createCard(index) {
+async function createCard(index, existingCards) {
   const cardElement = document.createElement('div');
   cardElement.className = 'bubble';
   cardElement.innerHTML = `
@@ -48,14 +49,13 @@ async function createCard(index) {
     </div>
   `;
   
-  // Get all cards for current page
-  const pageCards = await getPageCards(currentPage);
-  const existingCard = pageCards.find(card => card.position === index);
+  const existingCard = existingCards.find(card => card.position === index);
 
   if (existingCard) {
     const cardDiv = cardElement.querySelector('.card');
     cardDiv.classList.add('flipped');
-    cardDiv.querySelector('.card-back').textContent = existingCard.emoji;
+    const cardBack = cardDiv.querySelector('.card-back');
+    cardBack.textContent = existingCard.emoji;
     
     cardElement.addEventListener('click', () => {
       document.querySelector('.details-image').textContent = existingCard.emoji;
@@ -75,7 +75,8 @@ async function createCard(index) {
         });
 
         cardDiv.classList.add('flipped');
-        cardDiv.querySelector('.card-back').textContent = emoji;
+        const cardBack = cardDiv.querySelector('.card-back');
+        cardBack.textContent = emoji;
         
         document.querySelector('.details-image').textContent = emoji;
         document.querySelector('.details-description').textContent = description;
@@ -90,9 +91,12 @@ async function renderGrid() {
   const container = document.querySelector('.bubble-container');
   container.innerHTML = '';
   
+  // First get all cards for the current page
+  const pageCards = await getPageCards(currentPage);
+  
   // Create and append all cards for the current page
   for (let i = 0; i < CARDS_PER_PAGE; i++) {
-    const card = await createCard(i);
+    const card = await createCard(i, pageCards);
     container.appendChild(card);
   }
   
@@ -100,9 +104,7 @@ async function renderGrid() {
   const maxPage = await getMaxPage();
   document.querySelector('.scroll-up').disabled = currentPage === 1;
   
-  const currentPageCards = await getPageCards(currentPage);
-  const allCardsFlipped = currentPageCards.length === CARDS_PER_PAGE;
-  
+  const allCardsFlipped = pageCards.length === CARDS_PER_PAGE;
   document.querySelector('.scroll-down').disabled = allCardsFlipped && currentPage === maxPage;
 }
 
@@ -119,7 +121,14 @@ async function setupPagination() {
 
   downButton.addEventListener('click', async () => {
     const maxPage = await getMaxPage();
-    currentPage++;
+    const currentPageCards = await getPageCards(currentPage);
+    
+    if (currentPageCards.length === CARDS_PER_PAGE && currentPage === maxPage) {
+      // Only create new page if current page is full
+      currentPage = maxPage + 1;
+    } else {
+      currentPage++;
+    }
     await renderGrid();
   });
 }
