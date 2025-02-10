@@ -11,15 +11,15 @@ async function generateEmoji() {
     body: JSON.stringify({
       prompt: `Generate a unique, interesting emoji combination (2-3 emojis) that tells a tiny story or creates a fun scene.
       
-      interface Response {
-        emoji: string;
-        description: string;
-      }
-      
-      example: {
-        "emoji": "🌙🎭✨",
-        "description": "A magical night at the theater"
-      }`,
+interface Response {
+  emoji: string;
+  description: string;
+}
+
+example: {
+  "emoji": "🌙🎭✨",
+  "description": "A magical night at the theater"
+}`,
       data: "Generate a unique emoji combination"
     }),
   });
@@ -32,13 +32,14 @@ async function getMaxPage() {
   return Math.max(...cards.map(card => card.page), 1);
 }
 
-async function getPageCards(pageNum) {
-  return await room.collection('cards')
+async function doesPageExist(pageNum) {
+  const cards = await room.collection('cards')
     .filter({ page: pageNum })
     .getList();
+  return cards.length > 0;
 }
 
-async function createCard(index, pageCards) {
+async function createCard(index) {
   const cardElement = document.createElement('div');
   cardElement.className = 'bubble';
   cardElement.innerHTML = `
@@ -48,13 +49,14 @@ async function createCard(index, pageCards) {
     </div>
   `;
   
-  // Find if this card exists in the pageCards array
-  const existingCard = pageCards.find(card => card.position === index);
+  const existingCards = await room.collection('cards')
+    .filter({ position: index, page: currentPage })
+    .getList();
 
-  if (existingCard) {
-    const cardDiv = cardElement.querySelector('.card');
-    cardDiv.classList.add('flipped');
-    cardDiv.querySelector('.card-back').textContent = existingCard.emoji;
+  if (existingCards.length > 0) {
+    const existingCard = existingCards[0];
+    cardElement.querySelector('.card').classList.add('flipped');
+    cardElement.querySelector('.card-back').textContent = existingCard.emoji;
     
     cardElement.addEventListener('click', () => {
       document.querySelector('.details-image').textContent = existingCard.emoji;
@@ -84,26 +86,37 @@ async function createCard(index, pageCards) {
   return cardElement;
 }
 
+async function updateCurrentPageData() {
+  const pageCards = await room.collection('cards').filter({ page: currentPage }).getList();
+  pageCards.forEach(card => {
+    const cardElement = document.querySelector(`.bubble-container .bubble:nth-child(${card.position + 1})`);
+    if (cardElement) {
+      const cardDiv = cardElement.querySelector('.card');
+      if (!cardDiv.classList.contains('flipped')) {
+        cardDiv.classList.add('flipped');
+        cardDiv.querySelector('.card-back').textContent = card.emoji;
+      }
+    }
+  });
+}
+
 async function renderGrid() {
   const container = document.querySelector('.bubble-container');
   container.innerHTML = '';
   
-  // Fetch all cards for the current page
-  const pageCards = await getPageCards(currentPage);
-  
-  // Create and append cards
   for (let i = 0; i < CARDS_PER_PAGE; i++) {
-    const card = await createCard(i, pageCards);
+    const card = await createCard(i);
     container.appendChild(card);
   }
+  
+  await updateCurrentPageData();
   
   // Update page controls
   const maxPage = await getMaxPage();
   document.querySelector('.scroll-up').disabled = currentPage === 1;
   
-  // For the down button, we only disable if current page is fully flipped
-  // and it's the last page
-  const allCardsFlipped = pageCards.length === CARDS_PER_PAGE;
+  const currentPageCards = await room.collection('cards').filter({ page: currentPage }).getList();
+  const allCardsFlipped = currentPageCards.length === CARDS_PER_PAGE;
   document.querySelector('.scroll-down').disabled = allCardsFlipped && currentPage === maxPage;
 }
 
@@ -119,24 +132,16 @@ async function setupPagination() {
   });
 
   downButton.addEventListener('click', async () => {
+    const maxPage = await getMaxPage();
     currentPage++;
     await renderGrid();
+    upButton.disabled = currentPage === 1;
   });
 }
 
-// Subscribe to changes in the cards collection
-room.collection('cards').subscribe(async (cards) => {
-  const pageCards = await getPageCards(currentPage);
-  pageCards.forEach(card => {
-    const cardElement = document.querySelector(`.bubble:nth-child(${card.position + 1})`);
-    if (cardElement) {
-      const cardDiv = cardElement.querySelector('.card');
-      if (!cardDiv.classList.contains('flipped')) {
-        cardDiv.classList.add('flipped');
-        cardDiv.querySelector('.card-back').textContent = card.emoji;
-      }
-    }
-  });
+// Subscribe to changes in the cards collection and update current page data
+room.collection('cards').subscribe(() => {
+  updateCurrentPageData();
 });
 
 // Initialize the game
