@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/card-flip.css">
-  <script src="js/game.js" type="module"></script>
 </head>
 <body>
   <div class="container">
@@ -17,18 +16,11 @@
     </header>
 
     <main class="main-content">
-      <button class="scroll-arrow scroll-up">▲</button>
       <div class="bubble-container" id="cardGrid"></div>
-      <button class="scroll-arrow scroll-down">▼</button>
     </main>
 
-    <div class="pagination">
-      <span class="page-info">Page <span id="currentPage">1</span></span>
-      <div class="page-controls">
-        <button class="page-button" id="prevPage">←</button>
-        <button class="page-button" id="nextPage">→</button>
-      </div>
-    </div>
+    <button class="scroll-arrow scroll-up" disabled>▲</button>
+    <button class="scroll-arrow scroll-down">▼</button>
 
     <div class="details-panel">
       <div class="details-image" id="lastFlippedEmoji">❓</div>
@@ -38,6 +30,7 @@
       </div>
     </div>
   </div>
+  <script src="js/game.js" type="module"></script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>

@@ -26,6 +26,12 @@ async function generateEmoji() {
   return await response.json();
 }
 
+async function getMaxPage() {
+  const cards = await room.collection('cards').getList();
+  if (cards.length === 0) return 1;
+  return Math.max(...cards.map(card => card.page), 1);
+}
+
 async function createCard(index) {
   const cardElement = document.createElement('div');
   cardElement.className = 'bubble';
@@ -43,26 +49,32 @@ async function createCard(index) {
   if (existingCard.length > 0) {
     cardElement.querySelector('.card').classList.add('flipped');
     cardElement.querySelector('.card-back').textContent = existingCard[0].emoji;
+    
+    // Update details panel when clicking already flipped card
+    cardElement.addEventListener('click', () => {
+      document.querySelector('.details-image').textContent = existingCard[0].emoji;
+      document.querySelector('.details-description').textContent = existingCard[0].description;
+    });
+  } else {
+    cardElement.addEventListener('click', async function() {
+      if (!cardElement.querySelector('.card').classList.contains('flipped')) {
+        const { emoji, description } = await generateEmoji();
+        
+        await room.collection('cards').create({
+          position: index,
+          page: currentPage,
+          emoji: emoji,
+          description: description
+        });
+
+        cardElement.querySelector('.card').classList.add('flipped');
+        cardElement.querySelector('.card-back').textContent = emoji;
+        
+        document.querySelector('.details-image').textContent = emoji;
+        document.querySelector('.details-description').textContent = description;
+      }
+    });
   }
-
-  cardElement.addEventListener('click', async function() {
-    if (!cardElement.querySelector('.card').classList.contains('flipped')) {
-      const { emoji, description } = await generateEmoji();
-      
-      await room.collection('cards').create({
-        position: index,
-        page: currentPage,
-        emoji: emoji,
-        description: description
-      });
-
-      cardElement.querySelector('.card').classList.add('flipped');
-      cardElement.querySelector('.card-back').textContent = emoji;
-      
-      document.querySelector('.details-image').textContent = emoji;
-      document.querySelector('.details-description').textContent = description;
-    }
-  });
 
   return cardElement;
 }
@@ -75,38 +87,45 @@ async function renderGrid() {
     const card = await createCard(i);
     container.appendChild(card);
   }
+  
+  // Update page controls
+  const maxPage = await getMaxPage();
+  document.querySelector('.scroll-up').disabled = currentPage === 1;
+  document.querySelector('.scroll-down').disabled = currentPage === maxPage && 
+    document.querySelectorAll('.card.flipped').length < CARDS_PER_PAGE;
 }
 
-document.querySelector('.pagination').innerHTML = `
-  <button class="page-button" id="prevPage">Previous</button>
-  <span class="page-info" id="currentPage">Page 1 of 5</span>
-  <button class="page-button" id="nextPage">Next</button>
-`;
+async function setupPagination() {
+  const upButton = document.querySelector('.scroll-up');
+  const downButton = document.querySelector('.scroll-down');
 
-document.getElementById('prevPage').addEventListener('click', () => {
-  if (currentPage > 1) {
-    currentPage--;
-    document.getElementById('currentPage').textContent = `Page ${currentPage} of 5`;
-    renderGrid();
-  }
-});
+  upButton.addEventListener('click', async () => {
+    if (currentPage > 1) {
+      currentPage--;
+      await renderGrid();
+    }
+  });
 
-document.getElementById('nextPage').addEventListener('click', () => {
-  currentPage++;
-  document.getElementById('currentPage').textContent = `Page ${currentPage} of 5`;
-  renderGrid();
-});
+  downButton.addEventListener('click', async () => {
+    currentPage++;
+    await renderGrid();
+  });
+}
 
 room.collection('cards').subscribe((cards) => {
   cards.forEach(card => {
     if (card.page === currentPage) {
       const cardElement = document.querySelector(`.bubble:nth-child(${card.position + 1})`);
       if (cardElement) {
-        cardElement.querySelector('.card').classList.add('flipped');
-        cardElement.querySelector('.card-back').textContent = card.emoji;
+        const cardDiv = cardElement.querySelector('.card');
+        if (!cardDiv.classList.contains('flipped')) {
+          cardDiv.classList.add('flipped');
+          cardDiv.querySelector('.card-back').textContent = card.emoji;
+        }
       }
     }
   });
 });
 
+setupPagination();
 renderGrid();
