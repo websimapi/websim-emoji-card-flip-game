@@ -29,7 +29,16 @@ async function generateEmoji() {
 async function getMaxPage() {
   const cards = await room.collection('cards').getList();
   if (cards.length === 0) return 1;
+  
+  // Get the highest page number that has at least one card
   return Math.max(...cards.map(card => card.page), 1);
+}
+
+async function hasCardsOnPage(pageNum) {
+  const cards = await room.collection('cards')
+    .filter({ page: pageNum })
+    .getList();
+  return cards.length > 0;
 }
 
 async function createCard(index) {
@@ -50,7 +59,6 @@ async function createCard(index) {
     cardElement.querySelector('.card').classList.add('flipped');
     cardElement.querySelector('.card-back').textContent = existingCard[0].emoji;
     
-    // Update details panel when clicking already flipped card
     cardElement.addEventListener('click', () => {
       document.querySelector('.details-image').textContent = existingCard[0].emoji;
       document.querySelector('.details-description').textContent = existingCard[0].description;
@@ -91,8 +99,15 @@ async function renderGrid() {
   // Update page controls
   const maxPage = await getMaxPage();
   document.querySelector('.scroll-up').disabled = currentPage === 1;
-  document.querySelector('.scroll-down').disabled = currentPage === maxPage && 
-    document.querySelectorAll('.card.flipped').length < CARDS_PER_PAGE;
+  
+  // Only disable down button if we're on the max page AND all cards are flipped
+  const currentPageCards = await room.collection('cards')
+    .filter({ page: currentPage })
+    .getList();
+  const allCardsFlipped = currentPageCards.length === CARDS_PER_PAGE;
+  
+  document.querySelector('.scroll-down').disabled = 
+    currentPage === maxPage && allCardsFlipped;
 }
 
 async function setupPagination() {
@@ -107,8 +122,16 @@ async function setupPagination() {
   });
 
   downButton.addEventListener('click', async () => {
-    currentPage++;
-    await renderGrid();
+    const maxPage = await getMaxPage();
+    const hasCurrentPageCards = await hasCardsOnPage(currentPage);
+    
+    // Allow going to next page if either:
+    // 1. There are already cards on the next page
+    // 2. The current page has at least one flipped card
+    if (currentPage < maxPage || hasCurrentPageCards) {
+      currentPage++;
+      await renderGrid();
+    }
   });
 }
 
