@@ -32,11 +32,10 @@ async function getMaxPage() {
   return Math.max(...cards.map(card => card.page), 1);
 }
 
-async function doesPageExist(pageNum) {
-  const cards = await room.collection('cards')
+async function getPageCards(pageNum) {
+  return await room.collection('cards')
     .filter({ page: pageNum })
     .getList();
-  return cards.length > 0;
 }
 
 async function createCard(index) {
@@ -49,14 +48,14 @@ async function createCard(index) {
     </div>
   `;
   
-  const existingCards = await room.collection('cards')
-    .filter({ position: index, page: currentPage })
-    .getList();
+  // Get all cards for current page
+  const pageCards = await getPageCards(currentPage);
+  const existingCard = pageCards.find(card => card.position === index);
 
-  if (existingCards.length > 0) {
-    const existingCard = existingCards[0];
-    cardElement.querySelector('.card').classList.add('flipped');
-    cardElement.querySelector('.card-back').textContent = existingCard.emoji;
+  if (existingCard) {
+    const cardDiv = cardElement.querySelector('.card');
+    cardDiv.classList.add('flipped');
+    cardDiv.querySelector('.card-back').textContent = existingCard.emoji;
     
     cardElement.addEventListener('click', () => {
       document.querySelector('.details-image').textContent = existingCard.emoji;
@@ -64,7 +63,8 @@ async function createCard(index) {
     });
   } else {
     cardElement.addEventListener('click', async function() {
-      if (!cardElement.querySelector('.card').classList.contains('flipped')) {
+      const cardDiv = cardElement.querySelector('.card');
+      if (!cardDiv.classList.contains('flipped')) {
         const { emoji, description } = await generateEmoji();
         
         await room.collection('cards').create({
@@ -74,8 +74,8 @@ async function createCard(index) {
           description: description
         });
 
-        cardElement.querySelector('.card').classList.add('flipped');
-        cardElement.querySelector('.card-back').textContent = emoji;
+        cardDiv.classList.add('flipped');
+        cardDiv.querySelector('.card-back').textContent = emoji;
         
         document.querySelector('.details-image').textContent = emoji;
         document.querySelector('.details-description').textContent = description;
@@ -90,20 +90,17 @@ async function renderGrid() {
   const container = document.querySelector('.bubble-container');
   container.innerHTML = '';
   
+  // Create and append all cards for the current page
   for (let i = 0; i < CARDS_PER_PAGE; i++) {
     const card = await createCard(i);
     container.appendChild(card);
   }
   
-  // Update page controls
+  // Update navigation buttons
   const maxPage = await getMaxPage();
   document.querySelector('.scroll-up').disabled = currentPage === 1;
   
-  // For the down button, we always allow moving forward unless we're on a page
-  // that has all cards flipped
-  const currentPageCards = await room.collection('cards')
-    .filter({ page: currentPage })
-    .getList();
+  const currentPageCards = await getPageCards(currentPage);
   const allCardsFlipped = currentPageCards.length === CARDS_PER_PAGE;
   
   document.querySelector('.scroll-down').disabled = allCardsFlipped && currentPage === maxPage;
@@ -121,33 +118,23 @@ async function setupPagination() {
   });
 
   downButton.addEventListener('click', async () => {
-    // Get the highest page that exists
     const maxPage = await getMaxPage();
-    
-    // Always allow moving to the next page
     currentPage++;
-    
-    // If this page doesn't exist yet, it will show up as empty cards
-    // ready to be flipped
     await renderGrid();
-    
-    // Update navigation state
-    upButton.disabled = currentPage === 1;
-    // Down button is handled in renderGrid()
   });
 }
 
-// Subscribe to changes in the cards collection
-room.collection('cards').subscribe((cards) => {
-  cards.forEach(card => {
-    if (card.page === currentPage) {
-      const cardElement = document.querySelector(`.bubble:nth-child(${card.position + 1})`);
-      if (cardElement) {
-        const cardDiv = cardElement.querySelector('.card');
-        if (!cardDiv.classList.contains('flipped')) {
-          cardDiv.classList.add('flipped');
-          cardDiv.querySelector('.card-back').textContent = card.emoji;
-        }
+// Subscribe to real-time card updates
+room.collection('cards').subscribe(async (cards) => {
+  const currentPageCards = cards.filter(card => card.page === currentPage);
+  
+  currentPageCards.forEach(card => {
+    const cardElement = document.querySelector(`.bubble:nth-child(${card.position + 1})`);
+    if (cardElement) {
+      const cardDiv = cardElement.querySelector('.card');
+      if (!cardDiv.classList.contains('flipped')) {
+        cardDiv.classList.add('flipped');
+        cardDiv.querySelector('.card-back').textContent = card.emoji;
       }
     }
   });
